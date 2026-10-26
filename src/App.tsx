@@ -22,6 +22,12 @@ const DYNAMIC_VARIABLES: Record<string, string> = Object.fromEntries(
     .map(([key, value]) => [key.slice("VITE_DV_".length).toLowerCase(), String(value)])
 )
 
+// Connection type: VITE_CONNECTION_TYPE in .env, overridable per visit with
+// ?connection=webrtc or ?connection=websocket in the page URL.
+const urlConnection = new URLSearchParams(window.location.search).get("connection")
+const CONNECTION_TYPE: "webrtc" | "websocket" =
+  (urlConnection || env.VITE_CONNECTION_TYPE) === "websocket" ? "websocket" : "webrtc"
+
 const DEFAULT_AGENT = {
   agentId: env.VITE_AGENT_ID as string,
   name: (env.VITE_DV_FIRM_NAME as string) || "Customer Support",
@@ -39,7 +45,7 @@ export default function Page() {
       }}
       onConnect={() => setServerError(null)}
       onDisconnect={(details: { reason: string; message?: string }) => {
-        console.log("[ElevenLabs] disconnected:", details)
+        console.log(`[ElevenLabs] disconnected (${CONNECTION_TYPE}):`, details)
         if (details.reason === "error") {
           setServerError(details.message || "The call was interrupted.")
         } else if (details.reason === "agent") {
@@ -78,8 +84,7 @@ export function VoiceChat02({
       await navigator.mediaDevices.getUserMedia({ audio: true })
       startSession({
         agentId: DEFAULT_AGENT.agentId,
-        // WebSocket: this agent drops WebRTC sessions right after connecting
-        connectionType: "websocket",
+        connectionType: CONNECTION_TYPE,
         dynamicVariables: DYNAMIC_VARIABLES,
       })
     } catch (error) {
