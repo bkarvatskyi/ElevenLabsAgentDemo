@@ -38,17 +38,34 @@ export default function Page() {
         setServerError(message || "Something went wrong. See the browser console.")
       }}
       onConnect={() => setServerError(null)}
+      onDisconnect={(details: { reason: string; message?: string }) => {
+        console.log("[ElevenLabs] disconnected:", details)
+        if (details.reason === "error") {
+          setServerError(details.message || "The call was interrupted.")
+        } else if (details.reason === "agent") {
+          setServerError("The call was ended by the agent.")
+        }
+      }}
     >
       <main className="bg-background text-foreground flex min-h-svh items-center justify-center p-4">
         <div className="w-full max-w-md">
-          <VoiceChat02 serverError={serverError} />
+          <VoiceChat02
+            serverError={serverError}
+            clearServerError={() => setServerError(null)}
+          />
         </div>
       </main>
     </ConversationProvider>
   )
 }
 
-export function VoiceChat02({ serverError }: { serverError?: string | null }) {
+export function VoiceChat02({
+  serverError,
+  clearServerError,
+}: {
+  serverError?: string | null
+  clearServerError?: () => void
+}) {
   const { status } = useConversationStatus()
   const { startSession, endSession, getInputVolume, getOutputVolume } =
     useConversationControls()
@@ -57,10 +74,12 @@ export function VoiceChat02({ serverError }: { serverError?: string | null }) {
   const startConversation = useCallback(async () => {
     try {
       setErrorMessage(null)
+      clearServerError?.()
       await navigator.mediaDevices.getUserMedia({ audio: true })
       startSession({
         agentId: DEFAULT_AGENT.agentId,
-        connectionType: "webrtc",
+        // WebSocket: this agent drops WebRTC sessions right after connecting
+        connectionType: "websocket",
         dynamicVariables: DYNAMIC_VARIABLES,
       })
     } catch (error) {
@@ -71,7 +90,7 @@ export function VoiceChat02({ serverError }: { serverError?: string | null }) {
         setErrorMessage(error instanceof Error ? error.message : String(error))
       }
     }
-  }, [startSession])
+  }, [startSession, clearServerError])
 
   const handleCall = useCallback(() => {
     if (status === "disconnected" || status === "error") {
@@ -83,7 +102,8 @@ export function VoiceChat02({ serverError }: { serverError?: string | null }) {
 
   const isCallActive = status === "connected"
   const isTransitioning = status === "connecting"
-  const shownError = errorMessage ?? (status === "error" ? serverError : null)
+  const shownError =
+    errorMessage ?? (isCallActive || isTransitioning ? null : serverError ?? null)
 
   const scaledInputVolume = useCallback(() => {
     try {
